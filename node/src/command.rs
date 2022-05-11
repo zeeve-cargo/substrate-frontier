@@ -141,13 +141,7 @@ pub fn run() -> sc_cli::Result<()> {
 
 						cmd.run(config, client, inherent_benchmark_data()?, Arc::new(ext_builder))
 					},
-					BenchmarkCmd::Machine(cmd) => {
-						// let PartialComponents { client, .. } = service::new_partial(&config)?;
-						// let ext_builder = BenchmarkExtrinsicBuilder::new(client.clone());
-
-						// cmd.run(config, client, inherent_benchmark_data()?, Arc::new(ext_builder))
-						return Ok(())
-					},
+					BenchmarkCmd::Machine(cmd) => cmd.run(&config),
 				}
 			})
 		},

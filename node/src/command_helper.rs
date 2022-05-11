@@ -22,7 +22,7 @@
 use crate::service::FullClient;
 
 use node_template_runtime as runtime;
-use frame_system::Call as SystemCall;
+use runtime::SystemCall;
 use sc_cli::Result;
 use sc_client_api::BlockBackend;
 use sp_core::{Encode, Pair};
