@@ -472,7 +472,7 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type EstimateCallFee = TransactionPayment;
 	type SignedPhase = SignedPhase;
 	type UnsignedPhase = UnsignedPhase;
-	// type SolutionImprovementThreshold = SolutionImprovementThreshold;
+	type SolutionImprovementThreshold = SolutionImprovementThreshold;
 	type OffchainRepeat = OffchainRepeat;
 	type MinerMaxWeight = MinerMaxWeight;
 	type MinerMaxLength = MinerMaxLength;
@@ -497,9 +497,9 @@ impl pallet_election_provider_multi_phase::Config for Runtime {
 	type ForceOrigin = EnsureRootOrHalfCouncil;
 	type BenchmarkingConfig = ElectionProviderBenchmarkConfig;
 	type WeightInfo = pallet_election_provider_multi_phase::weights::SubstrateWeight<Self>;
-	type BetterUnsignedThreshold = BetterUnsignedThreshold;
-	type BetterSignedThreshold = ();
-	type SignedMaxRefunds = SignedMaxRefunds;
+	// type BetterUnsignedThreshold = BetterUnsignedThreshold;
+	// type BetterSignedThreshold = ();
+	// type SignedMaxRefunds = SignedMaxRefunds;
 	type MaxElectingVoters = MaxElectingVoters;
 	type MaxElectableTargets = MaxElectableTargets;
 	// BagsList allows a practically unbounded count of nominators to participate in NPoS elections.
