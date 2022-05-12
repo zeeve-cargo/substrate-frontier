@@ -1,5 +1,6 @@
 use crate::primitives::*;
 use crate::constants::{currency::DOLLARS};
+
 use node_template_runtime::{
 	SessionConfig, StakingConfig, TechnicalCommitteeConfig, BabeConfig, 
 	BABE_GENESIS_EPOCH_CONFIG, ImOnlineConfig, DemocracyConfig, ElectionsConfig,
@@ -9,11 +10,12 @@ use sp_runtime::{Perbill};
 use sp_consensus_babe::AuthorityId as BabeId;
 
 use node_template_runtime::{
-	AccountId, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
+	AccountId, BalancesConfig, GenesisConfig, Signature, SudoConfig,
 	SystemConfig, WASM_BINARY,
+	// GrandpaConfig
 };
 use sc_service::ChainType;
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+// use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
@@ -159,7 +161,7 @@ fn testnet_genesis(
 	initial_authorities: Vec<(AccountId, AccountId, BabeId, GrandpaId, ImOnlineId)>,
 	initial_nominators: Vec<AccountId>,
 	root_key: AccountId,
-	mut endowed_accounts: Vec<AccountId>,
+	endowed_accounts: Vec<AccountId>,
 ) -> GenesisConfig {
 
 	// stakers: all validators and nominators.
