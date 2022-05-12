@@ -8,8 +8,6 @@ mod cli;
 mod command;
 // mod command_helper;
 mod rpc;
-mod primitives;
-mod constants;
 
 fn main() -> sc_cli::Result<()> {
 	command::run()

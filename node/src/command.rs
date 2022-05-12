@@ -3,8 +3,8 @@ use crate::{
 	cli::{Cli, Subcommand},
 	service,
 };
-use frame_benchmarking_cli::BenchmarkCmd;
-use node_template_runtime::Block;
+// use frame_benchmarking_cli::BenchmarkCmd;
+// use node_template_runtime::Block;
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
 use sc_service::PartialComponents;
 
@@ -104,7 +104,7 @@ pub fn run() -> sc_cli::Result<()> {
 				Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
 			})
 		},
-		Some(Subcommand::Benchmark(cmd)) => {
+		Some(Subcommand::Benchmark(_cmd)) => {
 			Ok(())
 			// let runner = cli.create_runner(cmd)?;
 

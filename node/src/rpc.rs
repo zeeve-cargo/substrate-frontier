@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use node_template_runtime::{opaque::Block};
+use node_template_runtime::{opaque::Block, Hash, BlockNumber, AccountId, Index, Balance};
 pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 use sp_api::ProvideRuntimeApi;
@@ -25,7 +25,7 @@ use sp_consensus_babe::BabeApi;
 use sc_client_api::AuxStore;
 use sc_finality_grandpa_rpc::GrandpaRpcHandler;
 // use node_primitives::{AccountId, Balance, Index};
-use crate::primitives::*;
+// use crate::primitives::*;
 
 /// Extra dependencies for BABE.
 pub struct BabeDeps {

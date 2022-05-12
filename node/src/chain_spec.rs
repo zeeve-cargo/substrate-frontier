@@ -1,6 +1,3 @@
-use crate::primitives::*;
-use crate::constants::{currency::DOLLARS};
-
 use node_template_runtime::{
 	SessionConfig, StakingConfig, TechnicalCommitteeConfig, BabeConfig, 
 	BABE_GENESIS_EPOCH_CONFIG, ImOnlineConfig, DemocracyConfig, ElectionsConfig,
@@ -11,7 +8,7 @@ use sp_consensus_babe::AuthorityId as BabeId;
 
 use node_template_runtime::{
 	AccountId, BalancesConfig, GenesisConfig, Signature, SudoConfig,
-	SystemConfig, WASM_BINARY,
+	SystemConfig, WASM_BINARY, Balance, constants::currency::DOLLARS
 	// GrandpaConfig
 };
 use sc_service::ChainType;
