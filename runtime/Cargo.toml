@@ -57,6 +57,7 @@ sp-session = { default-features = false, git = "https://github.com/paritytech/su
 sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
 sp-transaction-pool = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
 sp-version = {  default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
+sp-consensus-aura = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
 
 # governance pallets
 pallet-scheduler = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
@@ -66,6 +67,7 @@ pallet-membership = { default-features = false, git = "https://github.com/parity
 pallet-democracy = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
 pallet-preimage = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
 pallet-elections-phragmen = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
+pallet-aura = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
 
 # Used for the node template's RPCs
 frame-system-rpc-runtime-api = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
@@ -113,6 +115,7 @@ std = [
 	"pallet-grandpa/std",
 	"pallet-randomness-collective-flip/std",
 	"pallet-sudo/std",
+	"pallet-aura/std",
 	"pallet-scheduler/std",
 	"pallet-treasury/std",
 	"pallet-collective/std",

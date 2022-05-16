@@ -18,7 +18,10 @@ use pallet_grandpa::{
 };
 pub use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sp_api::impl_runtime_apis;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_core::{
+	crypto::{ByteArray, KeyTypeId},
+	OpaqueMetadata, H160, H256, U256,
+};
 use sp_runtime::{
 	create_runtime_str,
 	curve::PiecewiseLinear,
@@ -32,7 +35,13 @@ use sp_runtime::{
 	transaction_validity::{TransactionPriority, TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, Perbill, Percent, Permill,
 };
-use sp_std::prelude::*;
+use pallet_evm::FeeCalculator;
+use pallet_evm::{Account as EVMAccount, EnsureAddressTruncated, HashedAddressMapping, Runner};
+use pallet_ethereum::{Call::transact, Transaction as EthereumTransaction};
+use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+
+
+use sp_std::{marker::PhantomData, prelude::*};
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
@@ -46,13 +55,13 @@ pub use frame_support::{
 	traits::{
 		ConstU128, ConstU32, ConstU8, Currency, EnsureOneOf, EqualPrivilegeOnly, Imbalance,
 		KeyOwnerProofSystem, LockIdentifier, OnUnbalanced, Randomness, StorageInfo,
-		U128CurrencyToVote, Contains,
+		U128CurrencyToVote, Contains, FindAuthor
 	},
 	weights::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		DispatchClass, IdentityFee, Weight, ConstantMultiplier
 	},
-	PalletId, StorageValue,
+	PalletId, StorageValue, ConsensusEngineId
 };
 pub use pallet_balances::Call as BalancesCall;
 #[cfg(any(feature = "std", test))]
@@ -64,11 +73,11 @@ pub use sp_runtime::BuildStorage;
 
 pub mod constants;
 use constants::currency::*;
-
 mod voter_bags;
-
 /// Import the template pallet.
 pub use pallet_template;
+mod precompiles;
+use precompiles::FrontierPrecompiles;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -932,6 +941,89 @@ impl pallet_preimage::Config for Runtime {
 	type ByteDeposit = PreimageByteDeposit;
 }
 
+
+pub struct FindAuthorTruncated<F>(PhantomData<F>);
+impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorTruncated<F> {
+	fn find_author<'a, I>(digests: I) -> Option<H160>
+	where
+		I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
+	{
+		if let Some(author_index) = F::find_author(digests) {
+			let authority_id = Aura::authorities()[author_index as usize].clone();
+			return Some(H160::from_slice(&authority_id.to_raw_vec()[4..24]));
+		}
+		None
+	}
+}
+
+parameter_types! {
+	pub const ChainId: u64 = 42;
+	pub BlockGasLimit: U256 = U256::from(u32::max_value());
+	pub PrecompilesValue: FrontierPrecompiles<Runtime> = FrontierPrecompiles::<_>::new();
+}
+
+impl pallet_evm::Config for Runtime {
+	type FeeCalculator = BaseFee;
+	type GasWeightMapping = ();
+	type BlockHashMapping = pallet_ethereum::EthereumBlockHashMapping<Self>;
+	type CallOrigin = EnsureAddressTruncated;
+	type WithdrawOrigin = EnsureAddressTruncated;
+	type AddressMapping = HashedAddressMapping<BlakeTwo256>;
+	type Currency = Balances;
+	type Event = Event;
+	type Runner = pallet_evm::runner::stack::Runner<Self>;
+	type PrecompilesType = FrontierPrecompiles<Self>;
+	type PrecompilesValue = PrecompilesValue;
+	type ChainId = ChainId;
+	type BlockGasLimit = BlockGasLimit;
+	type OnChargeTransaction = ();
+	type FindAuthor = FindAuthorTruncated<Aura>;
+}
+
+impl pallet_ethereum::Config for Runtime {
+	type Event = Event;
+	type StateRoot = pallet_ethereum::IntermediateStateRoot<Self>;
+}
+
+frame_support::parameter_types! {
+	pub BoundDivision: U256 = U256::from(1024);
+}
+
+impl pallet_dynamic_fee::Config for Runtime {
+	type MinGasPriceBoundDivisor = BoundDivision;
+}
+
+frame_support::parameter_types! {
+	pub IsActive: bool = true;
+	pub DefaultBaseFeePerGas: U256 = U256::from(1_000_000_000);
+}
+
+pub struct BaseFeeThreshold;
+impl pallet_base_fee::BaseFeeThreshold for BaseFeeThreshold {
+	fn lower() -> Permill {
+		Permill::zero()
+	}
+	fn ideal() -> Permill {
+		Permill::from_parts(500_000)
+	}
+	fn upper() -> Permill {
+		Permill::from_parts(1_000_000)
+	}
+}
+
+impl pallet_base_fee::Config for Runtime {
+	type Event = Event;
+	type Threshold = BaseFeeThreshold;
+	type IsActive = IsActive;
+	type DefaultBaseFeePerGas = DefaultBaseFeePerGas;
+}
+
+impl pallet_aura::Config for Runtime {
+	type AuthorityId = AuraId;
+	type DisabledValidators = ();
+	type MaxAuthorities = MaxAuthorities;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -971,6 +1063,11 @@ construct_runtime!(
 
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
+		EVM: pallet_evm::{Pallet, Config, Call, Storage, Event<T>},
+		Ethereum: pallet_ethereum::{Pallet, Call, Storage, Event, Config, Origin},
+		DynamicFee: pallet_dynamic_fee::{Pallet, Call, Storage, Config, Inherent},
+		BaseFee: pallet_base_fee::{Pallet, Call, Storage, Config<T>, Event},
+		Aura: pallet_aura::{Pallet, Config<T>},
 	}
 );
 

@@ -3965,6 +3965,7 @@ name = "node-template"
 version = "4.0.0-dev"
 dependencies = [
  "clap",
+ "fp-evm",
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "frame-system",
@@ -4032,6 +4033,7 @@ dependencies = [
  "frame-try-runtime",
  "hex-literal",
  "log",
+ "pallet-aura",
  "pallet-authorship",
  "pallet-babe",
  "pallet-bags-list",
@@ -4069,6 +4071,7 @@ dependencies = [
  "scale-info",
  "sp-api",
  "sp-block-builder",
+ "sp-consensus-aura",
  "sp-consensus-babe",
  "sp-core",
  "sp-inherents",
@@ -4307,6 +4310,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ff55baddef9e4ad00f88b6c743a2a8062d4c6ade126c2a528644b8e444d52ce"
 dependencies = [
  "stable_deref_trait",
+]
+
+[[package]]
+name = "pallet-aura"
+version = "4.0.0-dev"
+source = "git+https://github.com/paritytech/substrate.git?branch=polkadot-v0.9.20#563f4820d8f36d256ada7ea3fef46b2e94c4cd5a"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-application-crypto",
+ "sp-consensus-aura",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
