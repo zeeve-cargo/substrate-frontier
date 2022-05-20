@@ -1,7 +1,8 @@
 use node_template_runtime::{
 	SessionConfig, StakingConfig, TechnicalCommitteeConfig, BabeConfig, 
 	BABE_GENESIS_EPOCH_CONFIG, ImOnlineConfig, DemocracyConfig, ElectionsConfig,
-	CouncilConfig, ImOnlineId, MaxNominations, StakerStatus, EVMConfig, EthereumConfig, AuraConfig
+	CouncilConfig, ImOnlineId, MaxNominations, StakerStatus, 
+	EVMConfig, EthereumConfig, AuraConfig, EthereumChainIdConfig
 };
 use sp_runtime::{Perbill};
 use sp_consensus_babe::AuthorityId as BabeId;
@@ -85,7 +86,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 			testnet_genesis(
 				wasm_binary,
 				// Initial PoA authorities
-				vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
+				vec![authority_keys_from_seed("Alice")],
 				vec![],
 				// Sudo account
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -311,5 +312,6 @@ fn testnet_genesis(
 		ethereum: EthereumConfig {},
 		dynamic_fee: Default::default(),
 		base_fee: Default::default(),
+		ethereum_chain_id: EthereumChainIdConfig { chain_id: 42 },
 	}
 }

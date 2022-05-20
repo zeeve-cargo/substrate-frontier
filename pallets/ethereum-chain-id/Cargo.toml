@@ -1,0 +1,25 @@
+[package]
+name = "pallet-ethereum-chain-id"
+authors = [ "PureStake" ]
+edition = "2021"
+version = "1.0.0"
+
+[dependencies]
+serde = { version = "1.0.101", optional = true, features = [ "derive" ] }
+
+# Substrate
+frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20"}
+frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
+parity-scale-codec = { version = "3.0.0", default-features = false, features = [ "derive" ] }
+scale-info = { version = "2.0", default-features = false, features = [ "derive" ] }
+
+[features]
+default = [ "std" ]
+std = [
+	"frame-support/std",
+	"frame-system/std",
+	"parity-scale-codec/std",
+	"scale-info/std",
+	"serde",
+]
+try-runtime = [ "frame-support/try-runtime" ]

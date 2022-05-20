@@ -80,6 +80,7 @@ hex-literal = { version = "0.3.4", optional = true }
 
 # Local Dependencies
 pallet-template = { default-features = false, path = "../pallets/template" }
+pallet-ethereum-chain-id = { default-features = false, path = "../pallets/ethereum-chain-id" }
 
 # Zeeve
 fp-rpc = { path = "../primitives/rpc", default-features = false }
@@ -92,7 +93,6 @@ pallet-evm = { path = "../frame/evm", default-features = false }
 pallet-evm-precompile-modexp = { path = "../frame/evm/precompile/modexp", default-features = false }
 pallet-evm-precompile-sha3fips = { path = "../frame/evm/precompile/sha3fips", default-features = false }
 pallet-evm-precompile-simple = { path = "../frame/evm/precompile/simple", default-features = false }
-
 
 [build-dependencies]
 substrate-wasm-builder = { version = "5.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.20" }
@@ -134,6 +134,7 @@ std = [
 	"pallet-election-provider-multi-phase/std",
 	"pallet-utility/std",
 	"pallet-im-online/std",
+	"pallet-ethereum-chain-id/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-babe/std",
@@ -180,4 +181,5 @@ try-runtime = [
 	"pallet-sudo/try-runtime",
 	"pallet-timestamp/try-runtime",
 	"pallet-transaction-payment/try-runtime",
+	"pallet-ethereum-chain-id/try-runtime",
 ]
