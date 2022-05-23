@@ -1,16 +1,29 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
-
+use std::{
+	collections::BTreeMap,
+	sync::{Arc, Mutex}
+};
 use node_template_runtime::{self, opaque::Block, RuntimeApi};
+use sc_cli::SubstrateCli;
 use sc_client_api::{BlockBackend, ExecutorProvider};
 pub use sc_executor::NativeElseWasmExecutor;
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager, RpcHandlers};
+use sc_service::{error::Error as ServiceError, Configuration, TaskManager, RpcHandlers, BasePath};
 use sc_telemetry::{Telemetry, TelemetryWorker};
-use std::{sync::Arc};
 use sc_rpc_api::DenyUnsafe;
 use crate::rpc::{FullDeps, BabeDeps, GrandpaDeps, create_full};
 use sp_runtime::traits::Block as BlockT;
 use sc_network::NetworkService;
 use sc_consensus_babe::SlotProportion;
+// Frontier
+use fc_consensus::FrontierBlockImport;
+use fc_db::DatabaseSource;
+use fc_mapping_sync::{MappingSyncWorker, SyncStrategy};
+use fc_rpc::{EthTask, OverrideHandle};
+use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
+
+use crate::cli::Cli;
+// #[cfg(feature = "manual-seal")]
+// use crate::cli::Sealing;
 
 // Our native executor instance.
 pub struct ExecutorDispatch;
@@ -43,9 +56,62 @@ pub type IoHandler = jsonrpc_core::IoHandler<sc_rpc::Metadata>;
 type FullGrandpaBlockImport =
 	sc_finality_grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, FullSelectChain>;
 
+// FrontierFrontier
+// #[cfg(feature = "aura")]
+pub type ConsensusResult = (
+	FrontierBlockImport<
+		Block,
+		sc_finality_grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, FullSelectChain>,
+		FullClient,
+	>,
+	sc_finality_grandpa::LinkHalf<Block, FullClient, FullSelectChain>,
+);
+
+// #[cfg(feature = "manual-seal")]
+// pub type ConsensusResult = (
+// 	FrontierBlockImport<Block, Arc<FullClient>, FullClient>,
+// 	Sealing,
+// );
+
+pub fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::PathBuf {
+	let config_dir = config
+		.base_path
+		.as_ref()
+		.map(|base_path| base_path.config_dir(config.chain_spec.id()))
+		.unwrap_or_else(|| {
+			BasePath::from_project("", "", &crate::cli::Cli::executable_name())
+				.config_dir(config.chain_spec.id())
+		});
+	config_dir.join("frontier").join(path)
+}
+
+pub fn open_frontier_backend(config: &Configuration) -> Result<Arc<fc_db::Backend<Block>>, String> {
+	Ok(Arc::new(fc_db::Backend::<Block>::new(
+		&fc_db::DatabaseSettings {
+			source: match config.database {
+				DatabaseSource::RocksDb { .. } => DatabaseSource::RocksDb {
+					path: frontier_database_dir(config, "db"),
+					cache_size: 0,
+				},
+				DatabaseSource::ParityDb { .. } => DatabaseSource::ParityDb {
+					path: frontier_database_dir(config, "paritydb"),
+				},
+				DatabaseSource::Auto { .. } => DatabaseSource::Auto {
+					rocksdb_path: frontier_database_dir(config, "db"),
+					paritydb_path: frontier_database_dir(config, "paritydb"),
+					cache_size: 0,
+				},
+				_ => {
+					return Err("Supported db sources: `rocksdb` | `paritydb` | `auto`".to_string())
+				}
+			},
+		},
+	)?))
+}
+
 /// Builds a new service for a full client.
-pub fn new_full(config: Configuration) -> Result<TaskManager, ServiceError> {
-	new_full_base(config, |_, _| ()).map(|NewFullBase { task_manager, .. }| task_manager)
+pub fn new_full(config: Configuration, cli: &Cli) -> Result<TaskManager, ServiceError> {
+	new_full_base(config, |_, _| (), cli).map(|NewFullBase { task_manager, .. }| task_manager)
 }
 
 /// Result of [`new_full_base`].
@@ -69,6 +135,7 @@ pub fn new_full_base(
 		&sc_consensus_babe::BabeBlockImport<Block, FullClient, FullGrandpaBlockImport>,
 		&sc_consensus_babe::BabeLink<Block>,
 	),
+	cli: &Cli
 ) -> Result<NewFullBase, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
@@ -78,8 +145,16 @@ pub fn new_full_base(
 		keystore_container,
 		select_chain,
 		transaction_pool,
-		other: (rpc_extensions_builder, import_setup, rpc_setup, mut telemetry),
-	} = new_partial(&config)?;
+		other: (
+			rpc_extensions_builder, 
+			import_setup, 
+			rpc_setup, 
+			mut telemetry,
+			frontier_backend,
+			filter_pool,
+			(fee_history_cache, fee_history_cache_limit)
+		),
+	} = new_partial(&config, &cli)?;
 
 	let shared_voter_state = rpc_setup;
 	let grandpa_protocol_name = sc_finality_grandpa::protocol_standard_name(
@@ -256,6 +331,7 @@ pub fn new_full_base(
 /// Creates a new partial node.
 pub fn new_partial(
 	config: &Configuration,
+	cli: &Cli,
 ) -> Result<
 	sc_service::PartialComponents<
 		FullClient,
@@ -275,10 +351,20 @@ pub fn new_partial(
 			),
 			sc_finality_grandpa::SharedVoterState,
 			Option<Telemetry>,
+			// ConsensusResult,
+			Arc<fc_db::Backend<Block>>,
+			Option<FilterPool>,
+			(FeeHistoryCache, FeeHistoryCacheLimit),
 		),
 	>,
 	ServiceError,
 > {
+	if config.keystore_remote.is_some() {
+		return Err(ServiceError::Other(
+			"Remote Keystores are not supported.".to_string(),
+		));
+	}
+
 	let telemetry = config
 		.telemetry_endpoints
 		.clone()
@@ -319,6 +405,10 @@ pub fn new_partial(
 		task_manager.spawn_essential_handle(),
 		client.clone(),
 	);
+	let frontier_backend = open_frontier_backend(config)?;
+	let filter_pool: Option<FilterPool> = Some(Arc::new(Mutex::new(BTreeMap::new())));
+	let fee_history_cache: FeeHistoryCache = Arc::new(Mutex::new(BTreeMap::new()));
+	let fee_history_cache_limit: FeeHistoryCacheLimit = cli.run.fee_history_limit;
 
 	let (grandpa_block_import, grandpa_link) = sc_finality_grandpa::block_import(
 		client.clone(),
@@ -326,6 +416,15 @@ pub fn new_partial(
 		select_chain.clone(),
 		telemetry.as_ref().map(|x| x.handle()),
 	)?;
+
+	let frontier_block_import = FrontierBlockImport::new(
+		grandpa_block_import.clone(),
+		client.clone(),
+		frontier_backend.clone(),
+	);
+
+	let target_gas_price = cli.run.target_gas_price;
+
 	let justification_import = grandpa_block_import.clone();
 
 	let (block_import, babe_link) = sc_consensus_babe::block_import(
@@ -420,6 +519,14 @@ pub fn new_partial(
 		select_chain,
 		import_queue,
 		transaction_pool,
-		other: (rpc_extensions_builder, import_setup, rpc_setup, telemetry),
+		other: (
+			rpc_extensions_builder, 
+			import_setup, 
+			rpc_setup, 
+			telemetry,
+			frontier_backend,
+			filter_pool,
+			(fee_history_cache, fee_history_cache_limit),
+		),
 	})
 }

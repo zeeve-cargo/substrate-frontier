@@ -1,4 +1,27 @@
-use sc_cli::RunCmd;
+// use sc_cli::RunCmd;
+
+#[allow(missing_docs)]
+#[derive(Debug, clap::Parser)]
+pub struct RunCmd {
+	#[allow(missing_docs)]
+	#[clap(flatten)]
+	pub base: sc_cli::RunCmd,
+
+	#[clap(long)]
+	pub enable_dev_signer: bool,
+
+	/// Maximum number of logs in a query.
+	#[clap(long, default_value = "10000")]
+	pub max_past_logs: u32,
+
+	/// Maximum fee history cache size.
+	#[clap(long, default_value = "2048")]
+	pub fee_history_limit: u64,
+
+	/// The dynamic-fee pallet target gas price set by block author
+	#[clap(long, default_value = "1")]
+	pub target_gas_price: u64,
+}
 
 #[derive(Debug, clap::Parser)]
 pub struct Cli {
@@ -39,12 +62,4 @@ pub enum Subcommand {
 	/// Sub-commands concerned with benchmarking.
 	#[clap(subcommand)]
 	Benchmark(frame_benchmarking_cli::BenchmarkCmd),
-
-	/// Try some command against runtime state.
-	#[cfg(feature = "try-runtime")]
-	TryRuntime(try_runtime_cli::TryRuntimeCmd),
-
-	/// Try some command against runtime state. Note: `try-runtime` feature must be enabled.
-	#[cfg(not(feature = "try-runtime"))]
-	TryRuntime,
 }

@@ -17,7 +17,6 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 mod lru_cache;
-mod tests;
 
 use std::{
 	collections::{BTreeMap, HashMap},
