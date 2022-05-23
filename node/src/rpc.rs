@@ -5,7 +5,7 @@
 
 #![warn(missing_docs)]
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use node_template_runtime::{opaque::Block, Hash, BlockNumber, AccountId, Index, Balance};
 pub use sc_rpc_api::DenyUnsafe;
@@ -22,10 +22,21 @@ use sc_rpc::SubscriptionTaskExecutor;
 use sc_consensus_babe_rpc::BabeRpcHandler;
 use sp_consensus::SelectChain;
 use sp_consensus_babe::BabeApi;
-use sc_client_api::AuxStore;
 use sc_finality_grandpa_rpc::GrandpaRpcHandler;
+use sc_client_api::{
+	backend::{AuxStore, Backend, StateBackend, StorageProvider},
+	client::BlockchainEvents,
+};
+use sp_runtime::traits::BlakeTwo256;
 // use node_primitives::{AccountId, Balance, Index};
 // use crate::primitives::*;
+// Frontier
+use fc_rpc::{
+	EthBlockDataCacheTask, OverrideHandle, RuntimeApiStorageOverride, SchemaV1Override,
+	SchemaV2Override, SchemaV3Override, StorageOverride,
+};
+use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
+use fp_storage::EthereumStorageSchema;
 
 /// Extra dependencies for BABE.
 pub struct BabeDeps {
@@ -67,6 +78,41 @@ pub struct FullDeps<C, P, SC, B> {
 	pub babe: BabeDeps,
 	/// GRANDPA specific dependencies.
 	pub grandpa: GrandpaDeps<B>,
+}
+
+/// Overrides
+pub fn overrides_handle<C, BE>(client: Arc<C>) -> Arc<OverrideHandle<Block>>
+where
+	C: ProvideRuntimeApi<Block> + StorageProvider<Block, BE> + AuxStore,
+	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError>,
+	C: Send + Sync + 'static,
+	C::Api: sp_api::ApiExt<Block>
+		+ fp_rpc::EthereumRuntimeRPCApi<Block>
+		+ fp_rpc::ConvertTransactionRuntimeApi<Block>,
+	BE: Backend<Block> + 'static,
+	BE::State: StateBackend<BlakeTwo256>,
+{
+	let mut overrides_map = BTreeMap::new();
+	overrides_map.insert(
+		EthereumStorageSchema::V1,
+		Box::new(SchemaV1Override::new(client.clone()))
+			as Box<dyn StorageOverride<_> + Send + Sync>,
+	);
+	overrides_map.insert(
+		EthereumStorageSchema::V2,
+		Box::new(SchemaV2Override::new(client.clone()))
+			as Box<dyn StorageOverride<_> + Send + Sync>,
+	);
+	overrides_map.insert(
+		EthereumStorageSchema::V3,
+		Box::new(SchemaV3Override::new(client.clone()))
+			as Box<dyn StorageOverride<_> + Send + Sync>,
+	);
+
+	Arc::new(OverrideHandle {
+		schemas: overrides_map,
+		fallback: Box::new(RuntimeApiStorageOverride::new(client)),
+	})
 }
 
 /// Instantiate all full RPC extensions.

@@ -1,8 +1,11 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 use std::{
 	collections::BTreeMap,
-	sync::{Arc, Mutex}
+	sync::{Arc, Mutex},
+	time::Duration,
 };
+use futures::{future, StreamExt};
+use sc_client_api::BlockchainEvents;
 use node_template_runtime::{self, opaque::Block, RuntimeApi};
 use sc_cli::SubstrateCli;
 use sc_client_api::{BlockBackend, ExecutorProvider};
@@ -199,10 +202,11 @@ pub fn new_full_base(
 	let name = config.network.node_name.clone();
 	let enable_grandpa = !config.disable_grandpa;
 	let prometheus_registry = config.prometheus_registry().cloned();
+	let overrides = crate::rpc::overrides_handle(client.clone());
 
 	let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
 		config,
-		backend,
+		backend: backend.clone(),
 		client: client.clone(),
 		keystore: keystore_container.sync_keystore(),
 		network: network.clone(),
@@ -212,6 +216,17 @@ pub fn new_full_base(
 		system_rpc_tx,
 		telemetry: telemetry.as_mut(),
 	})?;
+
+	spawn_frontier_tasks(
+		&task_manager,
+		client.clone(),
+		backend,
+		frontier_backend,
+		filter_pool,
+		overrides,
+		fee_history_cache,
+		fee_history_cache_limit,
+	);
 
 	let (block_import, grandpa_link, babe_link) = import_setup;
 
@@ -529,4 +544,61 @@ pub fn new_partial(
 			(fee_history_cache, fee_history_cache_limit),
 		),
 	})
+}
+
+
+fn spawn_frontier_tasks(
+	task_manager: &TaskManager,
+	client: Arc<FullClient>,
+	backend: Arc<FullBackend>,
+	frontier_backend: Arc<fc_db::Backend<Block>>,
+	filter_pool: Option<FilterPool>,
+	overrides: Arc<OverrideHandle<Block>>,
+	fee_history_cache: FeeHistoryCache,
+	fee_history_cache_limit: FeeHistoryCacheLimit,
+) {
+	task_manager.spawn_essential_handle().spawn(
+		"frontier-mapping-sync-worker",
+		None,
+		MappingSyncWorker::new(
+			client.import_notification_stream(),
+			Duration::new(6, 0),
+			client.clone(),
+			backend,
+			frontier_backend.clone(),
+			3,
+			0,
+			SyncStrategy::Normal,
+		)
+		.for_each(|()| future::ready(())),
+	);
+
+	// Spawn Frontier EthFilterApi maintenance task.
+	if let Some(filter_pool) = filter_pool {
+		// Each filter is allowed to stay in the pool for 100 blocks.
+		const FILTER_RETAIN_THRESHOLD: u64 = 100;
+		task_manager.spawn_essential_handle().spawn(
+			"frontier-filter-pool",
+			None,
+			EthTask::filter_pool_task(client.clone(), filter_pool, FILTER_RETAIN_THRESHOLD),
+		);
+	}
+
+	// Spawn Frontier FeeHistory cache maintenance task.
+	task_manager.spawn_essential_handle().spawn(
+		"frontier-fee-history",
+		None,
+		EthTask::fee_history_task(
+			client.clone(),
+			overrides,
+			fee_history_cache,
+			fee_history_cache_limit,
+		),
+	);
+
+	task_manager.spawn_essential_handle().spawn(
+		"frontier-schema-cache-task",
+		None,
+		EthTask::ethereum_schema_cache_task(client, frontier_backend),
+	);
 }
