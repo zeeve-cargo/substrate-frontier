@@ -453,12 +453,37 @@ pub fn new_partial(
 
 	let (block_import, babe_link) = sc_consensus_babe::block_import(
 		sc_consensus_babe::Config::get(&*client)?,
-		grandpa_block_import,
+		grandpa_block_import.clone(),
 		client.clone(),
 	)?;
 
 	let slot_duration = babe_link.config().slot_duration();
 	let import_queue = sc_consensus_babe::import_queue(
+		babe_link.clone(),
+		block_import.clone(),
+		Some(Box::new(justification_import.clone())),
+		client.clone(),
+		select_chain.clone(),
+		move |_, ()| async move {
+			let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+
+			let slot =
+				sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+					*timestamp,
+					slot_duration,
+				);
+
+			let uncles =
+				sp_authorship::InherentDataProvider::<<Block as BlockT>::Header>::check_inherents();
+
+			Ok((timestamp, slot, uncles))
+		},
+		&task_manager.spawn_essential_handle(),
+		config.prometheus_registry(),
+		sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
+		telemetry.as_ref().map(|x| x.handle()),
+	)?;
+	let import_queue_ = sc_consensus_babe::import_queue(
 		babe_link.clone(),
 		block_import.clone(),
 		Some(Box::new(justification_import)),
@@ -483,25 +508,25 @@ pub fn new_partial(
 		sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
 		telemetry.as_ref().map(|x| x.handle()),
 	)?;
+	let warp_sync: Option<Arc<dyn WarpSyncProvider<Block>>> = Some(Arc::new(
+		sc_finality_grandpa::warp_proof::NetworkProvider::new(
+			backend.clone(),
+			grandpa_link.shared_authority_set().clone(),
+			Vec::default(),
+		),
+	));
+	let (network, system_rpc_tx, network_starter) =
+		sc_service::build_network(sc_service::BuildNetworkParams {
+			config: &config,
+			client: client.clone(),
+			transaction_pool: transaction_pool.clone(),
+			spawn_handle: task_manager.spawn_handle(),
+			import_queue: import_queue_,
+			block_announce_validator_builder: None,
+			warp_sync,
+		})?;
 
 	let import_setup = (block_import, grandpa_link, babe_link);
-	// let warp_sync: Option<Arc<dyn WarpSyncProvider<Block>>> = Some(Arc::new(
-	// 	sc_finality_grandpa::warp_proof::NetworkProvider::new(
-	// 		backend.clone(),
-	// 		grandpa_link.shared_authority_set().clone(),
-	// 		Vec::default(),
-	// 	),
-	// ));
-	// let (network, system_rpc_tx, network_starter) =
-	// 	sc_service::build_network(sc_service::BuildNetworkParams {
-	// 		config: &config,
-	// 		client: client.clone(),
-	// 		transaction_pool: transaction_pool.clone(),
-	// 		spawn_handle: task_manager.spawn_handle(),
-	// 		import_queue,
-	// 		block_announce_validator_builder: None,
-	// 		warp_sync,
-	// 	})?;
 
 	let (rpc_extensions_builder, rpc_setup) = {
 		let (_, grandpa_link, babe_link) = &import_setup;
@@ -527,7 +552,20 @@ pub fn new_partial(
 		let role = config.role.clone();
 		let is_authority = role.is_authority();
 		let enable_dev_signer = cli.run.enable_dev_signer;
-		// let network = network.clone();
+		let network = network.clone();
+		let filter_pool = filter_pool.clone();
+		let frontier_backend = frontier_backend.clone();
+		let max_past_logs = cli.run.max_past_logs;
+		let fee_history_cache = fee_history_cache.clone();
+		let prometheus_registry = config.prometheus_registry().cloned();
+		let overrides = crate::rpc::overrides_handle(client.clone());
+		let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
+			task_manager.spawn_handle(),
+			overrides.clone(),
+			50,
+			50,
+			prometheus_registry.clone(),
+		));
 
 		let rpc_extensions_builder = move |deny_unsafe, subscription_executor| {
 			let deps = FullDeps {
@@ -551,7 +589,14 @@ pub fn new_partial(
 					finality_provider: finality_proof_provider.clone(),
 				},
 				enable_dev_signer,
-				// network: network.clone()
+				network: network.clone(),
+				filter_pool: filter_pool.clone(),
+				backend: frontier_backend.clone(),
+				max_past_logs,
+				fee_history_cache: fee_history_cache.clone(),
+				fee_history_cache_limit,
+				overrides: overrides.clone(),
+				block_data_cache: block_data_cache.clone(),
 			};
 
 			create_full(deps).map_err(Into::into)

@@ -87,10 +87,22 @@ pub struct FullDeps<C, P, SC, B, A: ChainApi> {
 	pub is_authority: bool,
 	/// Whether to enable dev signer
 	pub enable_dev_signer: bool,
-	// Network service
-	// pub network: Arc<NetworkService<Block, Hash>>,
-	// EthFilterApi pool.
-	// pub filter_pool: Option<FilterPool>,
+	/// Network service
+	pub network: Arc<NetworkService<Block, Hash>>,
+	/// EthFilterApi pool.
+	pub filter_pool: Option<FilterPool>,
+	/// Backend.
+	pub backend: Arc<fc_db::Backend<Block>>,
+	/// Maximum number of logs in a query.
+	pub max_past_logs: u32,
+	/// Fee history cache.
+	pub fee_history_cache: FeeHistoryCache,
+	/// Maximum fee history cache size.
+	pub fee_history_cache_limit: FeeHistoryCacheLimit,
+	/// Ethereum data access overrides.
+	pub overrides: Arc<OverrideHandle<Block>>,
+	/// Cache for Ethereum block data.
+	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 }
 
 /// Overrides
@@ -169,8 +181,14 @@ where
 		graph,
 		is_authority,
 		enable_dev_signer,
-		// network
-		// filter_pool,
+		network,
+		filter_pool,
+		backend,
+		max_past_logs,
+		fee_history_cache,
+		fee_history_cache_limit,
+		overrides,
+		block_data_cache
 	} = deps;
 	let BabeDeps { keystore, babe_config, shared_epoch_changes } = babe;
 	let GrandpaDeps {
