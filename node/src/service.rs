@@ -113,33 +113,9 @@ pub fn open_frontier_backend(config: &Configuration) -> Result<Arc<fc_db::Backen
 }
 
 /// Builds a new service for a full client.
-pub fn new_full(config: Configuration, cli: &Cli) -> Result<TaskManager, ServiceError> {
-	new_full_base(config, |_, _| (), cli).map(|NewFullBase { task_manager, .. }| task_manager)
-}
-
-/// Result of [`new_full_base`].
-pub struct NewFullBase {
-	/// The task manager of the node.
-	pub task_manager: TaskManager,
-	/// The client instance of the node.
-	pub client: Arc<FullClient>,
-	/// The networking service of the node.
-	pub network: Arc<NetworkService<Block, <Block as BlockT>::Hash>>,
-	/// The transaction pool of the node.
-	pub transaction_pool: Arc<TransactionPool>,
-	/// The rpc handlers of the node.
-	pub rpc_handlers: RpcHandlers,
-}
-
-/// Creates a full service from the configuration.
-pub fn new_full_base(
-	mut config: Configuration,
-	with_startup_data: impl FnOnce(
-		&sc_consensus_babe::BabeBlockImport<Block, FullClient, FullGrandpaBlockImport>,
-		&sc_consensus_babe::BabeLink<Block>,
-	),
-	cli: &Cli
-) -> Result<NewFullBase, ServiceError> {
+pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, ServiceError> {
+	// new_full_base(config, |_, _| (), cli)
+	// .map(|NewFullBase { task_manager, .. }| task_manager)
 	let sc_service::PartialComponents {
 		client,
 		backend,
@@ -230,7 +206,11 @@ pub fn new_full_base(
 
 	let (block_import, grandpa_link, babe_link) = import_setup;
 
-	(with_startup_data)(&block_import, &babe_link);
+	// let with_startup_data: (
+	// 	&sc_consensus_babe::BabeBlockImport<Block, FullClient, FullGrandpaBlockImport>,
+	// 	&sc_consensus_babe::BabeLink<Block>,
+	// ) = ();
+	// (with_startup_data)(&block_import, &babe_link);
 
 	if let sc_service::config::Role::Authority { .. } = &role {
 		let proposer = sc_basic_authorship::ProposerFactory::new(
@@ -340,8 +320,35 @@ pub fn new_full_base(
 	}
 
 	network_starter.start_network();
-	Ok(NewFullBase { task_manager, client, network, transaction_pool, rpc_handlers })
+	// NewFullBase { task_manager, client, network, transaction_pool, rpc_handlers };
+	Ok(task_manager)
 }
+
+/// Result of [`new_full_base`].
+pub struct NewFullBase {
+	/// The task manager of the node.
+	pub task_manager: TaskManager,
+	/// The client instance of the node.
+	pub client: Arc<FullClient>,
+	/// The networking service of the node.
+	pub network: Arc<NetworkService<Block, <Block as BlockT>::Hash>>,
+	/// The transaction pool of the node.
+	pub transaction_pool: Arc<TransactionPool>,
+	/// The rpc handlers of the node.
+	pub rpc_handlers: RpcHandlers,
+}
+
+/// Creates a full service from the configuration.
+// pub fn new_full_base(
+// 	mut config: Configuration,
+// 	with_startup_data: impl FnOnce(
+// 		&sc_consensus_babe::BabeBlockImport<Block, FullClient, FullGrandpaBlockImport>,
+// 		&sc_consensus_babe::BabeLink<Block>,
+// 	),
+// 	cli: &Cli
+// ) -> Result<NewFullBase, ServiceError> {
+	
+// }
 
 /// Creates a new partial node.
 pub fn new_partial(
@@ -374,6 +381,8 @@ pub fn new_partial(
 	>,
 	ServiceError,
 > {
+	use sc_network::warp_request_handler::WarpSyncProvider;
+
 	if config.keystore_remote.is_some() {
 		return Err(ServiceError::Other(
 			"Remote Keystores are not supported.".to_string(),
@@ -476,6 +485,23 @@ pub fn new_partial(
 	)?;
 
 	let import_setup = (block_import, grandpa_link, babe_link);
+	// let warp_sync: Option<Arc<dyn WarpSyncProvider<Block>>> = Some(Arc::new(
+	// 	sc_finality_grandpa::warp_proof::NetworkProvider::new(
+	// 		backend.clone(),
+	// 		grandpa_link.shared_authority_set().clone(),
+	// 		Vec::default(),
+	// 	),
+	// ));
+	// let (network, system_rpc_tx, network_starter) =
+	// 	sc_service::build_network(sc_service::BuildNetworkParams {
+	// 		config: &config,
+	// 		client: client.clone(),
+	// 		transaction_pool: transaction_pool.clone(),
+	// 		spawn_handle: task_manager.spawn_handle(),
+	// 		import_queue,
+	// 		block_announce_validator_builder: None,
+	// 		warp_sync,
+	// 	})?;
 
 	let (rpc_extensions_builder, rpc_setup) = {
 		let (_, grandpa_link, babe_link) = &import_setup;
@@ -498,14 +524,20 @@ pub fn new_partial(
 		let select_chain = select_chain.clone();
 		let keystore = keystore_container.sync_keystore();
 		let chain_spec = config.chain_spec.cloned_box();
+		let role = config.role.clone();
+		let is_authority = role.is_authority();
+		let enable_dev_signer = cli.run.enable_dev_signer;
+		// let network = network.clone();
 
 		let rpc_extensions_builder = move |deny_unsafe, subscription_executor| {
 			let deps = FullDeps {
 				client: client.clone(),
 				pool: pool.clone(),
+				graph: pool.pool().clone(),
 				select_chain: select_chain.clone(),
 				chain_spec: chain_spec.cloned_box(),
 				deny_unsafe,
+				is_authority,
 				babe: BabeDeps {
 					babe_config: babe_config.clone(),
 					shared_epoch_changes: shared_epoch_changes.clone(),
@@ -518,6 +550,8 @@ pub fn new_partial(
 					subscription_executor,
 					finality_provider: finality_proof_provider.clone(),
 				},
+				enable_dev_signer,
+				// network: network.clone()
 			};
 
 			create_full(deps).map_err(Into::into)

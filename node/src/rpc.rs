@@ -27,6 +27,8 @@ use sc_client_api::{
 	backend::{AuxStore, Backend, StateBackend, StorageProvider},
 	client::BlockchainEvents,
 };
+use sc_network::NetworkService;
+use sc_transaction_pool::{ChainApi, Pool};
 use sp_runtime::traits::BlakeTwo256;
 // use node_primitives::{AccountId, Balance, Index};
 // use crate::primitives::*;
@@ -63,7 +65,7 @@ pub struct GrandpaDeps<B> {
 }
 
 /// Full client dependencies.
-pub struct FullDeps<C, P, SC, B> {
+pub struct FullDeps<C, P, SC, B, A: ChainApi> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -78,6 +80,17 @@ pub struct FullDeps<C, P, SC, B> {
 	pub babe: BabeDeps,
 	/// GRANDPA specific dependencies.
 	pub grandpa: GrandpaDeps<B>,
+	// new
+	/// Graph pool instance
+	pub graph: Arc<Pool<A>>,
+	/// The Node authority flag
+	pub is_authority: bool,
+	/// Whether to enable dev signer
+	pub enable_dev_signer: bool,
+	// Network service
+	// pub network: Arc<NetworkService<Block, Hash>>,
+	// EthFilterApi pool.
+	// pub filter_pool: Option<FilterPool>,
 }
 
 /// Overrides
@@ -116,8 +129,8 @@ where
 }
 
 /// Instantiate all full RPC extensions.
-pub fn create_full<C, P, SC, B>(
-	deps: FullDeps<C, P, SC, B>
+pub fn create_full<C, P, SC, B, A>(
+	deps: FullDeps<C, P, SC, B, A>
 ) -> Result<jsonrpc_core::IoHandler<sc_rpc_api::Metadata>, Box<dyn std::error::Error + Send + Sync>>
 where
 	C: ProvideRuntimeApi<Block>
@@ -135,6 +148,7 @@ where
 	SC: SelectChain<Block> + 'static,
 	B: sc_client_api::Backend<Block> + Send + Sync + 'static,
 	B::State: sc_client_api::backend::StateBackend<sp_runtime::traits::HashFor<Block>>,
+	A: ChainApi
 {
 	use fc_rpc::{
 		Eth, EthApi, EthDevSigner, EthFilter, EthFilterApi, EthPubSub, EthPubSubApi, EthSigner,
@@ -144,7 +158,20 @@ where
 	use substrate_frame_rpc_system::{FullSystem, SystemApi};
 
 	let mut io = jsonrpc_core::IoHandler::default();
-	let FullDeps { client, pool, select_chain, chain_spec: _, deny_unsafe, babe, grandpa } = deps;
+	let FullDeps { 
+		client, 
+		pool, 
+		select_chain, 
+		chain_spec: _, 
+		deny_unsafe, 
+		babe, 
+		grandpa,
+		graph,
+		is_authority,
+		enable_dev_signer,
+		// network
+		// filter_pool,
+	} = deps;
 	let BabeDeps { keystore, babe_config, shared_epoch_changes } = babe;
 	let GrandpaDeps {
 		shared_voter_state,
