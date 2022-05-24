@@ -566,6 +566,8 @@ pub fn new_partial(
 			50,
 			prometheus_registry.clone(),
 		));
+		let subscription_task_executor =
+			sc_rpc::SubscriptionTaskExecutor::new(task_manager.spawn_handle());
 
 		let rpc_extensions_builder = move |deny_unsafe, subscription_executor| {
 			let deps = FullDeps {
@@ -599,7 +601,10 @@ pub fn new_partial(
 				block_data_cache: block_data_cache.clone(),
 			};
 
-			create_full(deps).map_err(Into::into)
+			create_full(
+				deps,
+				subscription_task_executor.clone(),
+			).map_err(Into::into)
 		};
 
 		(rpc_extensions_builder, rpc_setup)

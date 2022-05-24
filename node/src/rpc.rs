@@ -6,10 +6,11 @@
 #![warn(missing_docs)]
 
 use std::{collections::BTreeMap, sync::Arc};
-
+use jsonrpc_pubsub::manager::SubscriptionManager;
 use node_template_runtime::{opaque::Block, Hash, BlockNumber, AccountId, Index, Balance};
 pub use sc_rpc_api::DenyUnsafe;
-use sc_transaction_pool_api::TransactionPool;
+// use sc_transaction_pool_api::TransactionPool;
+use sc_service::TransactionPool;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
@@ -142,25 +143,33 @@ where
 
 /// Instantiate all full RPC extensions.
 pub fn create_full<C, P, SC, B, A>(
-	deps: FullDeps<C, P, SC, B, A>
+	deps: FullDeps<C, P, SC, B, A>,
+	subscription_task_executor: SubscriptionTaskExecutor,
 ) -> Result<jsonrpc_core::IoHandler<sc_rpc_api::Metadata>, Box<dyn std::error::Error + Send + Sync>>
 where
-	C: ProvideRuntimeApi<Block>
-		+ HeaderBackend<Block>
-		+ AuxStore
-		+ HeaderMetadata<Block, Error = BlockChainError>
-		+ Sync
-		+ Send
-		+ 'static,
+	// C: ProvideRuntimeApi<Block>
+	// 	+ HeaderBackend<Block>
+	// 	+ AuxStore
+	// 	+ HeaderMetadata<Block, Error = BlockChainError>
+	// 	+ Sync
+	// 	+ Send
+	// 	+ 'static,
+	C: ProvideRuntimeApi<Block> + StorageProvider<Block, B> + AuxStore,
+	C: BlockchainEvents<Block>,
+	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError>,
+	C: Send + Sync + 'static,
 	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>,
 	C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
 	C::Api: BabeApi<Block>,
 	C::Api: BlockBuilder<Block>,
-	P: TransactionPool + 'static,
+	C::Api: fp_rpc::ConvertTransactionRuntimeApi<Block>,
+	C::Api: fp_rpc::EthereumRuntimeRPCApi<Block>,
+	// P: TransactionPool + 'static,
+	P: TransactionPool<Block = Block> + 'static,
 	SC: SelectChain<Block> + 'static,
 	B: sc_client_api::Backend<Block> + Send + Sync + 'static,
 	B::State: sc_client_api::backend::StateBackend<sp_runtime::traits::HashFor<Block>>,
-	A: ChainApi
+	A: ChainApi<Block = Block> + 'static,
 {
 	use fc_rpc::{
 		Eth, EthApi, EthDevSigner, EthFilter, EthFilterApi, EthPubSub, EthPubSubApi, EthSigner,
@@ -199,7 +208,7 @@ where
 		finality_provider,
 	} = grandpa;
 
-	io.extend_with(SystemApi::to_delegate(FullSystem::new(client.clone(), pool, deny_unsafe)));
+	io.extend_with(SystemApi::to_delegate(FullSystem::new(client.clone(), pool.clone(), deny_unsafe)));
 
 	io.extend_with(TransactionPaymentApi::to_delegate(TransactionPayment::new(client.clone())));
 
@@ -225,5 +234,56 @@ where
 	// to call into the runtime.
 	// `io.extend_with(YourRpcTrait::to_delegate(YourRpcStruct::new(ReferenceToClient, ...)));`
 	
+	let mut signers = Vec::new();
+	if enable_dev_signer {
+		signers.push(Box::new(EthDevSigner::new()) as Box<dyn EthSigner>);
+	}
+
+	io.extend_with(EthApi::to_delegate(Eth::new(
+		client.clone(),
+		pool.clone(),
+		graph,
+		Some(node_template_runtime::TransactionConverter),
+		network.clone(),
+		signers,
+		overrides.clone(),
+		backend.clone(),
+		is_authority,
+		block_data_cache.clone(),
+		fee_history_cache,
+		fee_history_cache_limit,
+	)));
+
+	if let Some(filter_pool) = filter_pool {
+		io.extend_with(EthFilterApi::to_delegate(EthFilter::new(
+			client.clone(),
+			backend,
+			filter_pool,
+			500, // max stored filters
+			max_past_logs,
+			block_data_cache,
+		)));
+	}
+
+	io.extend_with(NetApi::to_delegate(Net::new(
+		client.clone(),
+		network.clone(),
+		// Whether to format the `peer_count` response as Hex (default) or not.
+		true,
+	)));
+
+	io.extend_with(Web3Api::to_delegate(Web3::new(client.clone())));
+
+	io.extend_with(EthPubSubApi::to_delegate(EthPubSub::new(
+		pool,
+		client,
+		network,
+		SubscriptionManager::<HexEncodedIdProvider>::with_id_provider(
+			HexEncodedIdProvider::default(),
+			Arc::new(subscription_task_executor),
+		),
+		overrides,
+	)));
+
 	Ok(io)
 }
