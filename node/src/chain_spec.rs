@@ -280,7 +280,7 @@ fn testnet_genesis(
 				let mut map = BTreeMap::new();
 				map.insert(
 					// H160 address of Alice dev account
-					// Derived from SS58 (42 prefix) address
+					// Derived from SS58 (69 prefix) address
 					// SS58: 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
 					// hex: 0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d
 					// Using the full hex key, truncating to the first 20 bytes (the first 40 hex chars)
@@ -312,6 +312,6 @@ fn testnet_genesis(
 		ethereum: EthereumConfig {},
 		dynamic_fee: Default::default(),
 		base_fee: Default::default(),
-		ethereum_chain_id: EthereumChainIdConfig { chain_id: 42 },
+		ethereum_chain_id: EthereumChainIdConfig { chain_id: 69 },
 	}
 }

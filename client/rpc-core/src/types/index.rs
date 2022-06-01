@@ -81,15 +81,3 @@ impl<'a> Visitor<'a> for IndexVisitor {
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use serde_json;
-
-	#[test]
-	fn index_deserialization() {
-		let s = r#"["0xa", "10", 42]"#;
-		let deserialized: Vec<Index> = serde_json::from_str(s).unwrap();
-		assert_eq!(deserialized, vec![Index(10), Index(10), Index(42)]);
-	}
-}
